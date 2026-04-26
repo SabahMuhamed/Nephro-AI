@@ -1,0 +1,185 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root,
+  [data-theme="dark"] {
+    --background: 200 25% 3%;
+    --foreground: 180 10% 92%;
+
+    --card: 195 30% 8%;
+    --card-foreground: 180 10% 92%;
+
+    --popover: 195 30% 8%;
+    --popover-foreground: 180 10% 92%;
+
+    --primary: 168 80% 45%;
+    --primary-foreground: 200 25% 3%;
+
+    --secondary: 195 30% 14%;
+    --secondary-foreground: 180 10% 92%;
+
+    --muted: 195 20% 12%;
+    --muted-foreground: 195 15% 55%;
+
+    --accent: 340 75% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 195 20% 15%;
+    --input: 195 20% 15%;
+    --ring: 168 80% 45%;
+
+    --radius: 0.75rem;
+
+    --glow-primary: 168 80% 45%;
+    --glow-accent: 340 75% 55%;
+
+    --sidebar-background: 195 30% 6%;
+    --sidebar-foreground: 180 10% 92%;
+    --sidebar-primary: 168 80% 45%;
+    --sidebar-primary-foreground: 200 25% 3%;
+    --sidebar-accent: 195 30% 14%;
+    --sidebar-accent-foreground: 180 10% 92%;
+    --sidebar-border: 195 20% 15%;
+    --sidebar-ring: 168 80% 45%;
+
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  [data-theme="light"] {
+    --background: 0 0% 98%;
+    --foreground: 200 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 200 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 25% 10%;
+
+    --primary: 168 80% 35%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 195 20% 92%;
+    --secondary-foreground: 200 25% 10%;
+
+    --muted: 195 15% 93%;
+    --muted-foreground: 195 10% 40%;
+
+    --accent: 340 75% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 195 15% 85%;
+    --input: 195 15% 85%;
+    --ring: 168 80% 35%;
+
+    --sidebar-background: 0 0% 97%;
+    --sidebar-foreground: 200 25% 10%;
+    --sidebar-primary: 168 80% 35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 195 20% 92%;
+    --sidebar-accent-foreground: 200 25% 10%;
+    --sidebar-border: 195 15% 85%;
+    --sidebar-ring: 168 80% 35%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/60 backdrop-blur-xl border border-border/50 rounded-xl;
+    box-shadow: 0 0 30px -10px hsl(var(--primary) / 0.1);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-500;
+  }
+
+  .glass-card-hover:hover {
+    @apply border-primary/30;
+    box-shadow: 0 0 40px -10px hsl(var(--primary) / 0.25);
+    transform: translateY(-4px);
+  }
+
+  .glow-text {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(168 90% 65%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glow-text-accent {
+    background: linear-gradient(135deg, hsl(var(--accent)), hsl(340 85% 70%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-glow {
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    background: radial-gradient(circle, hsl(var(--primary) / 0.15) 0%, transparent 70%);
+    filter: blur(60px);
+    pointer-events: none;
+  }
+
+  .grid-bg {
+    background-image: 
+      linear-gradient(hsl(var(--border) / 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.3) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  .stat-number {
+    font-family: var(--font-heading);
+    @apply text-4xl font-bold;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--foreground)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .pulse-dot {
+    @apply w-2 h-2 rounded-full bg-primary;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4); }
+  50% { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
