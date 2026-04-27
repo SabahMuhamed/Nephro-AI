@@ -1,127 +1,189 @@
 import { motion } from "framer-motion";
-import { BarChart3, PieChart, TrendingUp, Users, Activity, FileText } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RPieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
+import { useEffect, useState } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+} from "recharts";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 
-const accuracyData = [
-  { model: "XGBoost", accuracy: 98, precision: 97, recall: 98 },
-  { model: "Random Forest", accuracy: 97, precision: 96, recall: 97 },
-  { model: "SVM", accuracy: 93, precision: 92, recall: 91 },
-  { model: "Logistic Reg.", accuracy: 89, precision: 88, recall: 87 },
-];
+const Dashboard = () => {
+  const { user } = useAuth();
 
-const ckdDistribution = [
-  { name: "CKD Positive", value: 250, color: "hsl(340 75% 55%)" },
-  { name: "CKD Negative", value: 150, color: "hsl(168 80% 45%)" },
-];
+  const [patients, setPatients] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    ckd: 0,
+    avgConfidence: 0,
+  });
+  const [trend, setTrend] = useState<any[]>([]);
 
-const trendData = [
-  { month: "Jan", predictions: 120, ckdDetected: 45 },
-  { month: "Feb", predictions: 180, ckdDetected: 62 },
-  { month: "Mar", predictions: 250, ckdDetected: 88 },
-  { month: "Apr", predictions: 310, ckdDetected: 105 },
-  { month: "May", predictions: 420, ckdDetected: 140 },
-  { month: "Jun", predictions: 530, ckdDetected: 175 },
-];
+  // 🚀 REAL-TIME FETCH
+  useEffect(() => {
+    if (!user) return;
 
-const stats = [
-  { icon: <Users className="w-5 h-5" />, label: "Total Predictions", value: "1,810" },
-  { icon: <Activity className="w-5 h-5" />, label: "CKD Detected", value: "615" },
-  { icon: <TrendingUp className="w-5 h-5" />, label: "Accuracy Rate", value: "98%" },
-  { icon: <FileText className="w-5 h-5" />, label: "Features Used", value: "24" },
-];
+    const fetchData = async () => {
+      const { data } = await supabase
+        .from("patients")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
 
-const Dashboard = () => (
-  <div className="min-h-screen bg-background">
-    <Navbar />
-    <div className="pt-24 pb-20">
-      <div className="container mx-auto px-6 max-w-6xl">
-        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-heading font-bold mb-4">
-            Analytics <span className="glow-text">Dashboard</span>
-          </h1>
-          <p className="text-muted-foreground">Model performance metrics and prediction analytics.</p>
-        </motion.div>
+      if (!data) return;
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-          {stats.map((s, i) => (
-            <motion.div
-              key={s.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 * i }}
-              className="glass-card p-5 text-center"
-            >
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary mb-3">{s.icon}</div>
-              <p className="stat-number text-2xl mb-1">{s.value}</p>
-              <p className="text-xs text-muted-foreground">{s.label}</p>
-            </motion.div>
-          ))}
-        </div>
+      setPatients(data);
 
-        <div className="grid lg:grid-cols-2 gap-6 mb-8">
-          {/* Model Comparison */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="glass-card p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <BarChart3 className="w-5 h-5 text-primary" />
-              <h2 className="font-heading font-semibold">Model Comparison</h2>
-            </div>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={accuracyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(195 20% 15%)" />
-                <XAxis dataKey="model" tick={{ fill: "hsl(195 15% 55%)", fontSize: 12 }} />
-                <YAxis domain={[80, 100]} tick={{ fill: "hsl(195 15% 55%)", fontSize: 12 }} />
-                <Tooltip contentStyle={{ background: "hsl(195 30% 8%)", border: "1px solid hsl(195 20% 15%)", borderRadius: 8, color: "hsl(180 10% 92%)" }} />
-                <Bar dataKey="accuracy" fill="hsl(168 80% 45%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="precision" fill="hsl(168 60% 35%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="recall" fill="hsl(195 30% 30%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      // 🔥 STATS
+      let total = data.length;
+      let ckd = data.filter((p) => p.prediction?.toLowerCase() === "ckd").length;
+      let avg =
+        data.reduce((sum, p) => sum + p.confidence, 0) / (total || 1);
+
+      setStats({
+        total,
+        ckd,
+        avgConfidence: avg,
+      });
+
+      // 🔥 TREND
+      const map: any = {};
+      data.forEach((p) => {
+        const d = new Date(p.created_at).toLocaleDateString();
+
+        if (!map[d]) map[d] = { date: d, value: 0 };
+
+        map[d].value++;
+      });
+
+      setTrend(Object.values(map));
+    };
+
+    fetchData();
+
+    // 🔥 AUTO REFRESH (REAL-TIME FEEL)
+    const interval = setInterval(fetchData, 5000);
+
+    return () => clearInterval(interval);
+  }, [user]);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+
+      <div className="pt-24 pb-20">
+        <div className="container mx-auto px-6 max-w-7xl">
+
+          {/* TITLE */}
+          <motion.div className="mb-10">
+            <h1 className="text-4xl font-bold">
+              Dashboard
+            </h1>
+            <p className="text-muted-foreground">
+              Real-time analytics of your predictions
+            </p>
           </motion.div>
 
-          {/* CKD Distribution */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="glass-card p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <PieChart className="w-5 h-5 text-primary" />
-              <h2 className="font-heading font-semibold">CKD Distribution</h2>
-            </div>
-            <ResponsiveContainer width="100%" height={280}>
-              <RPieChart>
-                <Pie data={ckdDistribution} cx="50%" cy="50%" innerRadius={70} outerRadius={110} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                  {ckdDistribution.map((entry, index) => (
-                    <Cell key={index} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ background: "hsl(195 30% 8%)", border: "1px solid hsl(195 20% 15%)", borderRadius: 8, color: "hsl(180 10% 92%)" }} />
-              </RPieChart>
-            </ResponsiveContainer>
-          </motion.div>
-        </div>
+          {/* ================= STATS ================= */}
+          <div className="grid md:grid-cols-3 gap-6 mb-12">
 
-        {/* Trend Line */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="glass-card p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            <h2 className="font-heading font-semibold">Prediction Trends</h2>
+            <div className="glass-card p-6">
+              <p className="text-sm text-muted-foreground">Total Predictions</p>
+              <h2 className="text-3xl font-bold">{stats.total}</h2>
+            </div>
+
+            <div className="glass-card p-6">
+              <p className="text-sm text-muted-foreground">CKD Detected</p>
+              <h2 className="text-3xl font-bold text-red-500">
+                {stats.ckd}
+              </h2>
+            </div>
+
+            <div className="glass-card p-6">
+              <p className="text-sm text-muted-foreground">Avg Confidence</p>
+              <h2 className="text-3xl font-bold text-green-500">
+                {(stats.avgConfidence * 100).toFixed(1)}%
+              </h2>
+            </div>
+
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(195 20% 15%)" />
-              <XAxis dataKey="month" tick={{ fill: "hsl(195 15% 55%)", fontSize: 12 }} />
-              <YAxis tick={{ fill: "hsl(195 15% 55%)", fontSize: 12 }} />
-              <Tooltip contentStyle={{ background: "hsl(195 30% 8%)", border: "1px solid hsl(195 20% 15%)", borderRadius: 8, color: "hsl(180 10% 92%)" }} />
-              <Legend />
-              <Line type="monotone" dataKey="predictions" stroke="hsl(168 80% 45%)" strokeWidth={2} dot={{ fill: "hsl(168 80% 45%)" }} />
-              <Line type="monotone" dataKey="ckdDetected" stroke="hsl(340 75% 55%)" strokeWidth={2} dot={{ fill: "hsl(340 75% 55%)" }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </motion.div>
+
+          {/* ================= CHART ================= */}
+          <div className="glass-card p-6 mb-12">
+            <h3 className="mb-4 font-semibold">Prediction Activity</h3>
+
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={trend}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip />
+
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#6366f1"
+                  strokeWidth={3}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* ================= HISTORY ================= */}
+          <div className="glass-card p-6">
+            <h3 className="mb-4 font-semibold">Recent Patients</h3>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="p-3 text-left">Patient</th>
+                    <th className="p-3">Result</th>
+                    <th className="p-3">Confidence</th>
+                    <th className="p-3">Date</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {patients.slice(-10).reverse().map((p, i) => (
+                    <tr key={i} className="border-t">
+                      <td className="p-3">{p.patient_name}</td>
+                      <td className="p-3">
+                        {p.prediction?.toLowerCase() === "ckd" ? (
+                          <span className="text-red-500">CKD</span>
+                        ) : (
+                          <span className="text-green-500">Normal</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        {p.confidence.toFixed(2)}%
+                      </td>
+                      <td className="p-3">
+                        {new Date(p.created_at).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+
+        </div>
       </div>
+
+      <Footer />
     </div>
-    <Footer />
-  </div>
-);
+  );
+};
 
 export default Dashboard;
