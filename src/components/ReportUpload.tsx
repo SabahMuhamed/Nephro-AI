@@ -1,31 +1,15 @@
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, FileText, AlertTriangle, CheckCircle2, Loader2, X } from "lucide-react";
+import { Upload, FileText, Loader2, X, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FIELD_LABELS } from "@/constants/fields";
 
-interface ReportUploadProps {
-  onValuesExtracted: (values: Record<string, string>, missing: string[]) => void;
-}
-
-const ReportUpload = ({ onValuesExtracted }: ReportUploadProps) => {
+const ReportUpload = ({ onValuesExtracted }: { onValuesExtracted: (v: any, m: string[]) => void }) => {
   const [file, setFile] = useState<File | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [extractedCount, setExtractedCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (selected) {
-      setFile(selected);
-      setMissingFields([]);
-      setExtractedCount(null);
-      setError(null);
-    }
-  };
 
   const handleExtract = async () => {
     if (!file) return;
@@ -33,161 +17,99 @@ const ReportUpload = ({ onValuesExtracted }: ReportUploadProps) => {
     setError(null);
 
     try {
-      const text = await file.text();
+      const formData = new FormData();
+      formData.append("file", file);
 
-      // ✅ Split into lines (MAIN FIX)
-      const lines = text.split("\n").map((l) => l.trim().toLowerCase());
+      const res = await fetch("http://127.0.0.1:5000/extract-report", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Extraction failed");
 
-      const allFields = Object.keys(FIELD_LABELS);
-      const extracted: Record<string, string> = {};
-      const missing: string[] = [];
-
-      for (const field of allFields) {
-        const label = FIELD_LABELS[field].toLowerCase().split("(")[0].trim();
-        let found = false;
-
-        for (const line of lines) {
-          if (!line) continue;
-
-          const patterns = [
-            new RegExp(`^${field}\\s*[=:;]\\s*(.+)$`, "i"),
-            new RegExp(`^${label}\\s*[=:;]\\s*(.+)$`, "i"),
-          ];
-
-          for (const pattern of patterns) {
-            const match = line.match(pattern);
-            if (match) {
-              extracted[field] = match[1].trim();
-              found = true;
-              break;
-            }
-          }
-
-          if (found) break;
-        }
-
-        if (!found) {
-          missing.push(field);
-        }
-      }
-
-      setExtractedCount(Object.keys(extracted).length);
-      setMissingFields(missing);
-      onValuesExtracted(extracted, missing);
-
-      if (Object.keys(extracted).length === 0) {
-        setError(
-          "Could not extract any values. Try structured format like 'bp = 120'."
-        );
-      }
-    } catch {
-      setError("Failed to read the file.");
+      // We don't normalize keys here because the backend already returns correct keys
+      const missing = Object.keys(FIELD_LABELS).filter((k) => !data[k]);
+      onValuesExtracted(data, missing);
+      setExtractedCount(Object.keys(data).length);
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setIsExtracting(false);
     }
   };
 
-  const clearFile = () => {
-    setFile(null);
-    setMissingFields([]);
-    setExtractedCount(null);
-    setError(null);
-    if (inputRef.current) inputRef.current.value = "";
-  };
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 }}
-      className="glass-card p-6 mb-8 max-w-3xl mx-auto"
+      className="max-w-3xl mx-auto rounded-2xl border border-primary/20 bg-card shadow-lg shadow-primary/5 overflow-hidden"
     >
-      <h3 className="text-lg font-heading font-semibold mb-1 flex items-center gap-2">
-        <FileText className="w-5 h-5 text-primary" />
-        Upload Medical Report
-      </h3>
-      <p className="text-sm text-muted-foreground mb-4">
-        Upload a medical report (.txt, .csv) and we'll try to extract values automatically.
-      </p>
-
-      <div className="flex flex-col sm:flex-row gap-3 items-start">
-        <label className="flex-1 w-full cursor-pointer">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-border hover:border-primary/50 bg-background/50 transition-colors">
-            <Upload className="w-5 h-5 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground truncate">
-              {file ? file.name : "Choose a file..."}
-            </span>
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".txt,.csv,.json"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-        </label>
-
-        {file && (
-          <div className="flex gap-2">
-            <Button onClick={handleExtract} disabled={isExtracting} size="sm" className="gap-2">
-              {isExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              {isExtracting ? "Extracting..." : "Extract Values"}
-            </Button>
-            <Button onClick={clearFile} variant="ghost" size="icon" className="h-9 w-9">
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
+      {/* Dynamic Header */}
+      <div className="bg-primary px-6 py-4 flex items-center justify-between text-primary-foreground">
+        <div className="flex items-center gap-3">
+          <FileText className="w-5 h-5" />
+          <h3 className="font-bold tracking-tight">AI Report Analysis</h3>
+        </div>
+        {isExtracting && <Loader2 className="animate-spin w-4 h-4" />}
       </div>
 
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mt-4 flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm"
-          >
-            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-            <span>{error}</span>
-          </motion.div>
-        )}
+      <div className="p-8">
+        <div
+          onClick={() => !isExtracting && inputRef.current?.click()}
+          className={`relative border-2 border-dashed rounded-xl p-12 transition-all flex flex-col items-center justify-center
+            ${file ? 'border-primary bg-primary/5' : 'border-muted-foreground/20 hover:border-primary/40 hover:bg-muted/50'}
+            cursor-pointer`}
+        >
+          <input type="file" ref={inputRef} className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
 
-        {extractedCount !== null && !error && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mt-4 space-y-3"
-          >
-            <div className="flex items-center gap-2 text-sm text-primary">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>
-                Extracted <strong>{extractedCount}</strong> of {Object.keys(FIELD_LABELS).length} values
-              </span>
-            </div>
-
-            {missingFields.length > 0 && (
-              <div className="p-3 rounded-lg bg-accent/10 border border-accent/20">
-                <p className="text-sm font-medium text-accent mb-2 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4" />
-                  Missing values — please fill manually:
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {missingFields.map((f) => (
-                    <span
-                      key={f}
-                      className="text-xs px-2 py-1 rounded-full bg-accent/15 text-accent border border-accent/20"
-                    >
-                      {FIELD_LABELS[f]}
-                    </span>
-                  ))}
+          <AnimatePresence mode="wait">
+            {!file ? (
+              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto mb-4">
+                  <Upload className="w-8 h-8 text-primary" />
                 </div>
-              </div>
+                <p className="font-semibold text-foreground">Upload Medical Report</p>
+                <p className="text-sm text-muted-foreground mt-1">PDF or Scanned Image</p>
+              </motion.div>
+            ) : (
+              <motion.div key="selected" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-primary" />
+                </div>
+                <p className="font-bold text-primary truncate max-w-[200px]">{file.name}</p>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                  className="mt-3 text-xs font-bold text-destructive hover:underline flex items-center gap-1 mx-auto"
+                >
+                  <X size={12} /> Remove File
+                </button>
+              </motion.div>
             )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </AnimatePresence>
+        </div>
+
+        <div className="mt-8 space-y-4">
+          <Button
+            onClick={handleExtract}
+            disabled={!file || isExtracting}
+            className="w-full h-12 text-lg font-bold shadow-md hover:shadow-lg transition-all"
+          >
+            {isExtracting ? "Processing Lab Values..." : "Analyze & Auto-fill Form"}
+          </Button>
+
+          {error && (
+            <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center gap-3">
+              <AlertCircle size={18} /> {error}
+            </div>
+          )}
+
+          {extractedCount !== null && !error && (
+            <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20 text-green-600 text-sm flex items-center justify-between">
+              <span className="flex items-center gap-2 font-medium">
+                <CheckCircle2 size={18} /> Extraction Successful
+              </span>
+              <span className="font-bold">{extractedCount} fields filled</span>
+            </div>
+          )}
+        </div>
+      </div>
     </motion.div>
   );
 };

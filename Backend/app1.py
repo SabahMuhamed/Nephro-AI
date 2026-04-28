@@ -1,18 +1,23 @@
+# =========================
+# IMPORTS
+# =========================
 import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import joblib
 import numpy as np
 
-print("Starting Flask app...")
-
 app = Flask(__name__)
 CORS(app)
 
+print("🚀 CKD API Running...")
+
 # =========================
-# LOAD MODEL FILES
+# LOAD NEW MODELS
 # =========================
-model = joblib.load("kidney.pkl")
+model_B = joblib.load("model_B.pkl")     # RF
+model_C = joblib.load("model_C_xgb.pkl")    # XGBoost
+
 columns = joblib.load("columns.pkl")
 median = joblib.load("median.pkl")
 
@@ -23,7 +28,6 @@ median = joblib.load("median.pkl")
 
 def validate_input(data):
     errors = []
-
     required_fields = [
         "age", "bp", "sg", "al", "su", "rbc", "pc", "pcc", "ba",
         "bgr", "bu", "sc", "sod", "pot", "hemo", "pcv",
@@ -32,221 +36,94 @@ def validate_input(data):
 
     for field in required_fields:
         if field not in data:
-            errors.append(f"{field} is missing")
-
-    try:
-        if float(data.get("age", 0)) <= 0:
-            errors.append("Age must be > 0")
-
-        if float(data.get("bp", 0)) <= 0:
-            errors.append("BP must be > 0")
-
-        if float(data.get("sc", 0)) <= 0:
-            errors.append("Creatinine must be > 0")
-
-        if float(data.get("hemo", 0)) <= 0:
-            errors.append("Hemoglobin must be > 0")
-
-    except:
-        errors.append("Invalid numeric values")
+            errors.append(f"{field} missing")
 
     return errors
 
-
 # =========================
-# ROUTES
+# PREDICT
 # =========================
-@app.route("/")
-def home():
-    return "CKD Prediction API is running 🚀"
 
 
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
         data = request.json
+        patient_name = data.get("patient_name", "Unknown")
 
-        # Handle empty values
-        for key in data:
-            if data[key] == "":
-                data[key] = np.nan
+        # CLEAN EMPTY
+        for k in data:
+            if data[k] == "":
+                data[k] = np.nan
 
-        # Validate input
+        # VALIDATE
         errors = validate_input(data)
         if errors:
-            return jsonify({
-                "error": "Invalid input",
-                "details": errors
-            }), 400
-
-        # Convert to DataFrame
-        df_input = pd.DataFrame([data])
+            return jsonify({"error": errors}), 400
 
         # =========================
-        # PREPROCESSING (same as training)
+        # PREPROCESS
         # =========================
-        df_input = df_input.apply(
-            lambda x: x.astype(str).str.lower().str.strip())
+        df = pd.DataFrame([data])
 
-        df_input = df_input.replace({
+        df = df.apply(lambda x: x.astype(str).str.strip().str.lower())
+
+        df = df.replace({
             "yes": 1, "no": 0,
             "normal": 1, "abnormal": 0,
             "present": 1, "notpresent": 0,
             "good": 1, "poor": 0
         })
 
-        df_input = df_input.apply(pd.to_numeric, errors="coerce")
-        df_input = df_input.fillna(median)
+        df = df.apply(pd.to_numeric, errors="coerce")
+        df = df.fillna(median)
 
-        # Ensure correct column order
         for col in columns:
-            if col not in df_input:
-                df_input[col] = 0
+            if col not in df:
+                df[col] = 0
 
-        df_input = df_input[columns]
+        df = df[columns]
 
         # =========================
         # MODEL PREDICTION
         # =========================
-        pred_class = model.predict(df_input)[0]
+        prob_B = float(model_B.predict_proba(df)[0][1])   # RF
+        prob_C = float(model_C.predict_proba(df)[0][1])   # XGB
 
-        labels = {
-            0: "No Disease",
-            1: "Low Risk",
-            2: "Moderate Risk",
-            3: "High Risk"
-        }
-
-        # Default from model
-        risk_level = labels[pred_class]
-
-        # =========================
-        # RULE-BASED OVERRIDE (CRITICAL FIX)
-        # =========================
-        sc = float(data.get("sc", 0))
-        bp = float(data.get("bp", 0))
-        hemo = float(data.get("hemo", 0))
-
-        # =========================
-        # SCORING SYSTEM (0–100)
-        # =========================
-
-        score = 0
-
-        # Creatinine (sc)
-        if sc > 2:
-            score += 40
-        elif sc > 1.2:
-            score += 25
-        elif sc > 1.0:
-            score += 10
-
-# Blood Pressure (bp)
-        if bp > 160:
-            score += 30
-        elif bp > 140:
-            score += 20
-        elif bp > 130:
-            score += 10
-
-# Hemoglobin (hemo)
-        if hemo < 10:
-            score += 30
-        elif hemo < 12:
-            score += 20
-        elif hemo < 13:
-            score += 10
-
-# Clamp score to 100
-        score = min(score, 100)
-
-        # Default (best case)
-        risk_level = "No Disease"
-
-# Low Risk (slightly abnormal)
-        if sc > 1.0 or bp > 130 or hemo < 13:
-            risk_level = "Low Risk"
-
-# Moderate Risk
-        if sc > 1.2 or bp > 140 or hemo < 12:
-            risk_level = "Moderate Risk"
-
-# High Risk (severe)
-        if sc > 2 or bp > 160 or hemo < 10:
-            risk_level = "High Risk"
-
-        # =========================
-        # FINAL YES/NO DECISION
-        # =========================
-        if risk_level == "No Disease":
-            result = "No"
+        # 🔥 IMPROVED ENSEMBLE (XGB dominant)
+        if abs(prob_B - prob_C) < 0.15:
+            final_prob = (prob_B + prob_C) / 2
+        elif prob_C > 0.75:
+            final_prob = prob_C
+        elif prob_B > 0.75:
+            final_prob = prob_B
         else:
-            result = "Yes"
+            final_prob = (0.75 * prob_C) + (0.25 * prob_B)
 
         # =========================
-        # CAUSES
+        # THRESHOLD (MEDICAL SAFE)
         # =========================
-        causes = []
-
-        if sc > 1.2:
-            causes.append("High Creatinine (Kidney issue)")
-
-        if bp > 140:
-            causes.append("High Blood Pressure")
-
-        if hemo < 12:
-            causes.append("Low Hemoglobin (Anemia risk)")
+        threshold = 0.45
+        prediction = "ckd" if final_prob >= threshold else "not_ckd"
 
         # =========================
-        # RECOMMENDATIONS
-        # =========================
-        recommendations = []
-
-        if "High Creatinine (Kidney issue)" in causes:
-            recommendations.append("Consult nephrologist immediately")
-
-        if "High Blood Pressure" in causes:
-            recommendations.append("Reduce salt intake")
-
-        if "Low Hemoglobin (Anemia risk)" in causes:
-            recommendations.append("Increase iron intake")
-
-        if not recommendations:
-            recommendations.append("Maintain healthy lifestyle")
-
-        # =========================
-        # PREVENTION
-        # =========================
-        prevention = [
-            "Drink enough water",
-            "Exercise regularly",
-            "Avoid excess salt",
-            "Regular kidney checkups",
-            "Avoid overuse of painkillers"
-        ]
-
-        # =========================
-        # FINAL RESPONSE
+        # RESPONSE
         # =========================
         return jsonify({
-            "ckd_detected": result,
-            "risk_level": risk_level,
-            "risk_score": score,
-            "causes": causes,
-            "recommendations": recommendations,
-            "prevention": prevention
+            "patient_name": patient_name,
+            "prediction": prediction,
+            "confidence": round(final_prob * 100, 2),
+            "risk_level": "high" if final_prob > 0.75 else "medium" if final_prob > 0.45 else "low",
+            "model_details": {
+                "model_B_rf": round(prob_B, 3),
+                "model_C_xgb": round(prob_C, 3)
+            },
+            "inputs": data
         })
 
     except Exception as e:
-        print("ERROR:", str(e))
-        return jsonify({
-            "error": "Server error",
-            "message": str(e)
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 
-# =========================
-# RUN APP
-# =========================
 if __name__ == "__main__":
     app.run(debug=True)

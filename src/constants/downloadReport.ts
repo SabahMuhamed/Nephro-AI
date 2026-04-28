@@ -28,6 +28,7 @@ export const downloadReportPDF = (result: ReportData) => {
     pdf.setFontSize(10);
     pdf.setFont("helvetica", "normal");
 
+    // ✅ Patient name ONLY here
     pdf.text(`Patient: ${result.patient_name}`, 10, y);
     pdf.text(`Date: ${new Date().toLocaleDateString()}`, 140, y);
 
@@ -68,17 +69,21 @@ export const downloadReportPDF = (result: ReportData) => {
     y += 5;
 
     // =========================
-    // TABLE DATA
+    // STATUS LOGIC
     // =========================
-    pdf.setFont("helvetica", "normal");
+    const getStatus = (key: string, value: number | string) => {
+        const num = Number(value);
 
-    const getStatus = (key: string, value: number) => {
-        if (key === "bp" && value > 140) return "High";
-        if (key === "sc" && value > 1.5) return "Critical";
-        if (key === "hemo" && value < 10) return "Low";
+        if (key === "bp" && num > 140) return "High";
+        if (key === "sc" && num > 1.5) return "Critical";
+        if (key === "hemo" && num < 10) return "Low";
+
         return "Normal";
     };
 
+    // =========================
+    // FIELD LABELS
+    // =========================
     const FIELD_NAMES: Record<string, string> = {
         age: "Age",
         bp: "Blood Pressure",
@@ -93,24 +98,44 @@ export const downloadReportPDF = (result: ReportData) => {
         hemo: "Hemoglobin",
         pcv: "Packed Cell Volume",
         wc: "WBC",
-        rc: "RBC",
+        rc: "RBC Count",
+
+        // categorical
+        rbc: "Red Blood Cells",
+        pc: "Pus Cell",
+        pcc: "Pus Cell Clumps",
+        ba: "Bacteria",
+        htn: "Hypertension",
+        dm: "Diabetes",
+        cad: "Coronary Disease",
+        appet: "Appetite",
+        pe: "Pedal Edema",
+        ane: "Anemia",
     };
 
-    Object.entries(result.inputs).forEach(([key, value]) => {
-        if (y > 270) {
-            pdf.addPage();
-            y = 10;
-        }
+    // =========================
+    // TABLE DATA (FIXED)
+    // =========================
+    pdf.setFont("helvetica", "normal");
 
-        const label = FIELD_NAMES[key] || key;
-        const status = getStatus(key, value);
+    Object.entries(result.inputs)
+        // 🚀 REMOVE patient_name from table
+        .filter(([key]) => key !== "patient_name")
+        .forEach(([key, value]) => {
+            if (y > 270) {
+                pdf.addPage();
+                y = 10;
+            }
 
-        pdf.text(label, 10, y);
-        pdf.text(String(value), 80, y);
-        pdf.text(status, 140, y);
+            const label = FIELD_NAMES[key] || key;
+            const status = getStatus(key, value);
 
-        y += 6;
-    });
+            pdf.text(label, 10, y);
+            pdf.text(String(value), 80, y);
+            pdf.text(status, 140, y);
+
+            y += 6;
+        });
 
     y += 5;
 
@@ -167,7 +192,7 @@ export const downloadReportPDF = (result: ReportData) => {
     );
 
     // =========================
-    // SAVE FILE (WITH NAME)
+    // SAVE FILE
     // =========================
     const filename = `CKD_Report_${result.patient_name.replace(/\s+/g, "_")}.pdf`;
 
